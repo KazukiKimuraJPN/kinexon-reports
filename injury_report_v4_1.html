@@ -747,7 +747,7 @@ function checkPw(){
 
   <hr class="divider">
   <div class="st">リスク分布グラフ</div>
-  <div class="ss">各指標と受傷率の関係。等間隔ビンで集計した実データより作成。</div>
+  <div class="ss">各指標と受傷率の関係。実データより集計。4つ目グラフは<strong style="color:var(--text)">COD ZScore 2日連続低下（ルールC）</strong>の有無で受傷率を比較。</div>
   <div class="g2" style="margin-bottom:20px">
     <div>
       <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:6px">distance_total_m_Acute(7dSum) — Day 0 / 5,000m等間隔</div>
@@ -758,12 +758,12 @@ function checkPw(){
       <div style="position:relative;height:160px"><canvas id="cJump"></canvas></div>
     </div>
     <div>
-      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:6px">accel_load_accum_ACWR(EWMA) — Day 0 / 0.25等間隔</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:6px">accel_load_accum_ACWR(EWMA) — Day 0 / 0.25等間隔（〜2.0まで）</div>
       <div style="position:relative;height:160px"><canvas id="cAcwr"></canvas></div>
     </div>
     <div>
-      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:6px">accel_load_accum_ZScore — Day -1 / 10分位</div>
-      <div style="position:relative;height:160px"><canvas id="cAccZ"></canvas></div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:6px">COD ZScore 2日連続低下 — Day -1 / 非該当 vs 該当</div>
+      <div style="position:relative;height:160px"><canvas id="cCod2"></canvas></div>
     </div>
   </div>
 
@@ -944,11 +944,42 @@ function initCharts(){
     [4.23,1.60,0.89,0.00,0.47,0.71,1.79,1.45,2.34,0.34],'rgba(139,92,246,1)','distance_total_m_Acute(7dSum) — Day 0 [5000m等間隔]');
   lc('cJump',['0-5k','5-10k','10-15k','15-20k','20-25k','25-30k','30-35k','35-40k','40k+'],
     [1.68,0.83,0.81,0.45,1.08,2.19,0.65,1.10,2.82],'rgba(239,68,68,1)','jump_load_Daily — Day 0 [5000等間隔]');
-  lc('cAcwr',['<0.25','0.25-0.5','0.5-0.75','0.75-1.0','1.0-1.25','1.25-1.5','1.5-1.75','1.75-2.0','2.0+'],
-    [0.00,0.00,2.99,0.80,0.87,0.65,0.84,0.00,0.57],'rgba(245,158,11,1)','accel_load_accum_ACWR(EWMA) — Day 0 [0.25等間隔]');
-  // Day -1 Risk Curves より
-  lc('cAccZ',['Q1','Q2','Q3','Q4','Q5','Q6','Q7','Q8','Q9','Q10'],
-    [2.51,1.35,0.19,0.19,0.19,0.58,0.58,1.16,0.77,0.77],'rgba(16,185,129,1)','accel_load_accum_ZScore — Day -1 [10分位]');
+  // ACWR: 2.0+を除外し0〜2.0の範囲に限定（Day -1 実データ）
+  lc('cAcwr',['<0.25','0.25-0.5','0.5-0.75','0.75-1.0','1.0-1.25','1.25-1.5','1.5-1.75','1.75-2.0'],
+    [0.00,0.00,1.35,0.52,0.54,0.46,0.53,0.00],'rgba(245,158,11,1)','accel_load_accum_ACWR(EWMA) [0.25等間隔 / 〜2.0]');
+  // COD ZScore 2日連続低下 vs 受傷率（Day -1 実データ）
+  // 非該当: 0.507%  |  2日連続低下: 1.245%（約2.5倍のリスク）
+  const cCod2el=document.getElementById('cCod2');
+  if(cCod2el){
+    new Chart(cCod2el,{
+      type:'bar',
+      data:{
+        labels:['COD低下なし
+(n=7,491)','2日連続低下
+(n=241)'],
+        datasets:[{
+          data:[0.507,1.245],
+          backgroundColor:['rgba(59,130,246,0.6)','rgba(239,68,68,0.7)'],
+          borderColor:['rgba(59,130,246,1)','rgba(239,68,68,1)'],
+          borderWidth:1.5,
+          borderRadius:4,
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{label:c=>' 受傷率: '+c.parsed.y.toFixed(3)+'%'}},
+          annotation:{annotations:{line1:{type:'line',yMin:0.507,yMax:0.507,borderColor:'rgba(59,130,246,0.5)',borderDash:[4,4],borderWidth:1}}}
+        },
+        scales:{
+          x:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#8a96aa',font:{size:9}}},
+          y:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#8a96aa',font:{size:8},callback:v=>v.toFixed(2)+'%'},
+             title:{display:true,text:'翌日受傷率(%)',color:'#8a96aa',font:{size:8}},beginAtZero:true,max:1.6}
+        }
+      }
+    });
+  }
 }
 const sc=document.createElement('script');
 sc.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
