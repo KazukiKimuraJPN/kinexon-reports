@@ -954,9 +954,7 @@ function initCharts(){
     new Chart(cCod2el,{
       type:'bar',
       data:{
-        labels:['COD低下なし
-(n=7,491)','2日連続低下
-(n=241)'],
+        labels:['COD低下なし (n=7,491)','2日連続低下 (n=241)'],
         datasets:[{
           data:[0.507,1.245],
           backgroundColor:['rgba(59,130,246,0.6)','rgba(239,68,68,0.7)'],
@@ -969,8 +967,7 @@ function initCharts(){
         responsive:true,maintainAspectRatio:false,
         plugins:{
           legend:{display:false},
-          tooltip:{callbacks:{label:c=>' 受傷率: '+c.parsed.y.toFixed(3)+'%'}},
-          annotation:{annotations:{line1:{type:'line',yMin:0.507,yMax:0.507,borderColor:'rgba(59,130,246,0.5)',borderDash:[4,4],borderWidth:1}}}
+          tooltip:{callbacks:{label:c=>' 受傷率: '+c.parsed.y.toFixed(3)+'%'}}
         },
         scales:{
           x:{grid:{color:'rgba(255,255,255,0.05)'},ticks:{color:'#8a96aa',font:{size:9}}},
