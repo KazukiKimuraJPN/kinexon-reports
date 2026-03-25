@@ -1,0 +1,959 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ケガ予防分析レポート — Kinexon GPS × XGBoost</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0a0e1a;--bg2:#111827;--bg3:#1a2235;--bg4:#1e2a40;
+  --border:rgba(255,255,255,0.08);--border2:rgba(255,255,255,0.15);
+  --text:#e8edf5;--text2:#8a96aa;--text3:#5a6478;
+  --accent:#3b82f6;--accent2:#60a5fa;
+  --red:#ef4444;--red2:#fca5a5;
+  --amber:#f59e0b;--amber2:#fcd34d;
+  --green:#10b981;--green2:#6ee7b7;
+  --purple:#8b5cf6;--purple2:#c4b5fd;
+  --mono:'DM Mono',monospace;--sans:'Noto Sans JP',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.7}
+
+/* NAV */
+header{position:sticky;top:0;z-index:100;background:rgba(10,14,26,.95);backdrop-filter:blur(14px);border-bottom:1px solid var(--border2);padding:0 28px;display:flex;align-items:center}
+.logo{font-family:var(--mono);font-size:10px;color:var(--accent2);letter-spacing:.14em;padding:16px 20px 16px 0;border-right:1px solid var(--border);white-space:nowrap;flex-shrink:0}
+nav{display:flex;overflow-x:auto;scrollbar-width:none}
+nav::-webkit-scrollbar{display:none}
+nav button{background:none;border:none;color:var(--text2);padding:16px 16px;font-family:var(--sans);font-size:12px;cursor:pointer;white-space:nowrap;border-bottom:2px solid transparent;transition:color .2s,border-color .2s}
+nav button:hover{color:var(--text)}
+nav button.active{color:var(--accent2);border-bottom-color:var(--accent2)}
+
+/* LAYOUT */
+main{max-width:1160px;margin:0 auto;padding:44px 28px 80px}
+.pane{display:none}.pane.active{display:block}
+
+/* HERO */
+.hero{margin-bottom:40px;padding:36px 40px;background:linear-gradient(135deg,rgba(59,130,246,.07),rgba(139,92,246,.05));border:1px solid var(--border2);border-radius:16px}
+.hero-eye{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.18em;margin-bottom:10px}
+.hero-title{font-size:24px;font-weight:700;line-height:1.35;margin-bottom:8px}
+.hero-title span{color:var(--accent2)}
+.hero-sub{color:var(--text2);font-size:13px;line-height:1.7}
+
+/* SECTION */
+.st{font-size:16px;font-weight:700;margin-bottom:6px;display:flex;align-items:center;gap:10px}
+.st::before{content:'';display:block;width:4px;height:18px;border-radius:2px;background:var(--accent);flex-shrink:0}
+.ss{color:var(--text2);font-size:12px;margin-bottom:18px;line-height:1.65}
+.divider{border:none;border-top:1px solid var(--border);margin:28px 0}
+
+/* CARDS */
+.card{background:var(--bg3);border:1px solid var(--border);border-radius:12px;padding:18px 20px}
+.ct{font-size:13px;font-weight:700;margin-bottom:6px}
+.cb{font-size:12px;color:var(--text2);line-height:1.75}
+.g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+
+/* KPI */
+.kpi{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.kl{font-size:10px;color:var(--text3);font-family:var(--mono);letter-spacing:.05em;margin-bottom:5px}
+.kv{font-size:22px;font-weight:700}
+.kn{font-size:11px;color:var(--text2);margin-top:3px}
+
+/* TAGS */
+.tag{display:inline-block;font-size:10px;font-family:var(--mono);padding:2px 7px;border-radius:4px;margin:2px}
+.tr{background:rgba(239,68,68,.15);color:#fca5a5}
+.ta{background:rgba(245,158,11,.15);color:#fcd34d}
+.tg{background:rgba(16,185,129,.15);color:#6ee7b7}
+.tb{background:rgba(59,130,246,.15);color:#60a5fa}
+.tp{background:rgba(139,92,246,.15);color:#c4b5fd}
+.tgr{background:rgba(255,255,255,.06);color:var(--text2)}
+
+/* METRIC CHIPS */
+.mn{display:inline-block;font-family:var(--mono);font-size:11px;background:var(--bg4);border:1px solid var(--border2);color:var(--accent2);padding:2px 8px;border-radius:4px;word-break:break-all}
+.fn{display:inline-block;font-family:var(--mono);font-size:11px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.25);color:#fca5a5;padding:2px 8px;border-radius:4px;word-break:break-all}
+
+/* BAR CHART */
+.br{display:flex;align-items:center;gap:8px;margin:5px 0}
+.bl{font-family:var(--mono);font-size:10px;color:var(--text2);width:260px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bt{flex:1;background:var(--bg4);border-radius:2px;height:9px}
+.bf{height:9px;border-radius:2px}
+.bv{font-family:var(--mono);font-size:10px;color:var(--text2);width:42px;text-align:right;flex-shrink:0}
+
+/* TABLE */
+.tbl-w{border:1px solid var(--border);border-radius:10px;overflow:hidden}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{background:var(--bg4);padding:9px 11px;font-size:10px;font-family:var(--mono);color:var(--text2);text-align:left;border-bottom:1px solid var(--border2);letter-spacing:.04em;white-space:nowrap}
+td{padding:8px 11px;border-bottom:.5px solid var(--border);color:var(--text);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+/* NOTICES */
+.notice{background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:8px;padding:11px 15px;font-size:12px;color:#fde68a;line-height:1.65;margin-bottom:18px}
+.notice-b{background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);border-radius:8px;padding:11px 15px;font-size:12px;color:#93c5fd;line-height:1.65;margin-bottom:18px}
+.notice-g{background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:11px 15px;font-size:12px;color:#6ee7b7;line-height:1.65;margin-bottom:18px}
+
+/* RULE BOX */
+.rule{border-left:3px solid var(--red);background:var(--bg3);border-radius:0 10px 10px 0;padding:14px 17px;margin-bottom:10px}
+.rule.amber{border-left-color:var(--amber)}
+.rule.green{border-left-color:var(--green)}
+.rule-t{font-size:13px;font-weight:700;margin-bottom:8px}
+.rule-c{font-family:var(--mono);font-size:11px;color:var(--accent2);line-height:1.9}
+.rule-n{font-size:12px;color:var(--text2);margin-top:8px}
+
+/* ACCORDION */
+.acc{border:1px solid var(--border);border-radius:10px;margin-bottom:8px;overflow:hidden}
+.acc-h{display:flex;align-items:center;justify-content:space-between;padding:13px 17px;background:var(--bg3);cursor:pointer;font-size:13px;font-weight:500;transition:background .15s}
+.acc-h:hover{background:var(--bg4)}
+.acc-a{font-size:11px;color:var(--text3);transition:transform .2s}
+.acc-b{display:none;padding:16px;background:var(--bg2)}
+.acc.open .acc-a{transform:rotate(180deg)}
+.acc.open .acc-b{display:block}
+
+/* FILTER BUTTONS */
+.fbtn{background:var(--bg3);border:1px solid var(--border);color:var(--text2);padding:5px 13px;border-radius:6px;font-size:12px;cursor:pointer;transition:all .15s}
+.fbtn.active{border-color:var(--accent2);color:var(--accent2)}
+
+/* PASSWORD */
+#pw-overlay{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center}
+#pw-box{width:360px;padding:40px 36px;background:var(--bg3);border:1px solid var(--border2);border-radius:20px;text-align:center}
+#pw-logo{font-family:var(--mono);font-size:10px;color:var(--accent2);letter-spacing:.16em;margin-bottom:28px}
+#pw-icon{width:48px;height:48px;margin:0 auto 20px;background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px}
+#pw-title{font-size:17px;font-weight:700;margin-bottom:6px}
+#pw-sub{font-size:12px;color:var(--text2);margin-bottom:24px;line-height:1.6}
+#pw-input{width:100%;padding:11px 14px;background:var(--bg4);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:15px;letter-spacing:.12em;text-align:center;outline:none;transition:border-color .2s;margin-bottom:12px}
+#pw-input:focus{border-color:var(--accent)}
+#pw-input.shake{animation:shake .35s ease;border-color:var(--red)}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+#pw-btn{width:100%;padding:11px;background:var(--accent);border:none;border-radius:8px;color:#fff;font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer;transition:background .2s,transform .1s;margin-bottom:14px}
+#pw-btn:hover{background:#2563eb}
+#pw-btn:active{transform:scale(.97)}
+#pw-err{font-size:12px;color:var(--red2);min-height:18px}
+#pw-note{font-size:10px;color:var(--text3);margin-top:16px;line-height:1.6}
+</style>
+</head>
+<body>
+
+<!-- PASSWORD -->
+<div id="pw-overlay">
+  <div id="pw-box">
+    <div id="pw-logo">KINEXON GPS × XGBoost</div>
+    <div id="pw-icon">🔒</div>
+    <div id="pw-title">アクセス認証</div>
+    <div id="pw-sub">このレポートは関係者限定です。<br>パスワードを入力してください。</div>
+    <input id="pw-input" type="password" placeholder="Password" autocomplete="off" onkeydown="if(event.key==='Enter')checkPw()">
+    <button id="pw-btn" onclick="checkPw()">確認する</button>
+    <div id="pw-err"></div>
+    <div id="pw-note">※ パスワードをお忘れの方は担当者にお問い合わせください</div>
+  </div>
+</div>
+<script>
+(function(){if(sessionStorage.getItem('phx_auth')==='1'){document.getElementById('pw-overlay').style.display='none'}})();
+function checkPw(){
+  const v=document.getElementById('pw-input').value;
+  if(v===atob('UEhYMjAyNg==')){
+    sessionStorage.setItem('phx_auth','1');
+    const o=document.getElementById('pw-overlay');
+    o.style.transition='opacity .4s';o.style.opacity='0';
+    setTimeout(()=>{o.style.display='none'},400);
+  } else {
+    const i=document.getElementById('pw-input'),e=document.getElementById('pw-err');
+    i.classList.remove('shake');void i.offsetWidth;i.classList.add('shake');i.value='';
+    e.textContent='パスワードが正しくありません';
+    setTimeout(()=>{e.textContent='';i.classList.remove('shake')},2500);
+  }
+}
+</script>
+
+<header>
+  <div class="logo">KINEXON GPS × XGBoost</div>
+  <nav>
+    <button class="active" onclick="sw(0)">① 分析の概要</button>
+    <button onclick="sw(1)">② 指標の読み方</button>
+    <button onclick="sw(2)">③ ケガ予測モデル</button>
+    <button onclick="sw(3)">④ 重要指標ランキング</button>
+    <button onclick="sw(4)">⑤ リスクルールと受傷事例</button>
+    <button onclick="sw(5)">⑥ 強度管理の実践基準</button>
+    <button onclick="sw(6)">⑦ 傷害種別の分析</button>
+  </nav>
+</header>
+
+<main>
+
+<!-- ① 分析の概要 -->
+<div class="pane active" id="p0">
+  <div class="hero">
+    <div class="hero-eye">INJURY PREVENTION REPORT — KINEXON GPS × XGBoost</div>
+    <div class="hero-title">GPSデータを使った<span>ケガ予防分析</span></div>
+    <div class="hero-sub">練習・試合中に身につけるKinexon GPSセンサーのデータを機械学習（XGBoost）で分析し、ケガが起きやすい状態を示す指標と閾値を特定しました。</div>
+  </div>
+
+  <div class="st">この分析でわかること</div>
+  <div class="ss">2つの視点でケガリスクを分析しています</div>
+  <div class="g2" style="margin-bottom:28px">
+    <div class="card" style="border-color:rgba(59,130,246,.3)">
+      <div class="tag tb" style="margin-bottom:8px">Day −1（前日予測）— 実務の主軸</div>
+      <div class="ct">「明日ケガをしやすい選手」を前日に特定する</div>
+      <div class="cb">前日の練習・試合後にGPSデータを確認し、翌日のリスクが高い選手を絞り込む。翌朝のメニュー調整・休養判断の根拠として使う。</div>
+    </div>
+    <div class="card" style="border-color:rgba(139,92,246,.3)">
+      <div class="tag tp" style="margin-bottom:8px">Day 0（当日理解）— 事後分析</div>
+      <div class="ct">「なぜその日にケガが起きたか」を理解する</div>
+      <div class="cb">受傷当日のGPSデータを使って要因を分析する。<strong style="color:var(--text)">_Daily 系の低値フラグ（LOW_flag）は除外</strong>して設計しており、序盤受傷によるGPS低値の誤学習を防いでいる。</div>
+    </div>
+  </div>
+
+  <div class="st">分析データ概要</div>
+  <div class="g4" style="margin-bottom:28px">
+    <div class="kpi"><div class="kl">GPS データ期間</div><div class="kv">約3年</div><div class="kn">2022〜2025年</div></div>
+    <div class="kpi"><div class="kl">総セッション数</div><div class="kv">8,210</div><div class="kn">選手×日のレコード数</div></div>
+    <div class="kpi"><div class="kl">非接触ケガ件数</div><div class="kv">66件</div><div class="kn">接触プレー除外後</div></div>
+    <div class="kpi"><div class="kl">分析傷害種別</div><div class="kv">7種類</div><div class="kn">部位別に指標を特定</div></div>
+  </div>
+
+  <div class="st">モデル精度（5-fold 交差検証）</div>
+  <div class="ss">ランダム予測（コインを投げた場合）のAUC = 0.500 を基準とします</div>
+  <div class="tbl-w" style="margin-bottom:20px">
+    <table>
+      <thead><tr><th>モデル</th><th>ROC-AUC</th><th>PR-AUC</th><th>Best F1</th><th>Best閾値</th><th>ランダム比</th><th>用途</th></tr></thead>
+      <tbody>
+        <tr>
+          <td style="font-weight:700">XGBoost — Day 0（当日GPS）</td>
+          <td style="font-family:var(--mono);color:#6ee7b7;font-weight:700">0.697</td>
+          <td style="font-family:var(--mono)">0.037</td>
+          <td style="font-family:var(--mono)">0.094</td>
+          <td style="font-family:var(--mono)">0.164</td>
+          <td style="font-family:var(--mono);color:#6ee7b7">+39.4%</td>
+          <td style="font-size:11px;color:var(--text2)">当日受傷の要因理解</td>
+        </tr>
+        <tr>
+          <td style="font-weight:700">XGBoost — Day −1 <span class="tag tg">翌日予測 推奨</span></td>
+          <td style="font-family:var(--mono);color:#6ee7b7;font-weight:700">0.624</td>
+          <td style="font-family:var(--mono)">0.024</td>
+          <td style="font-family:var(--mono)">0.074</td>
+          <td style="font-family:var(--mono)">0.091</td>
+          <td style="font-family:var(--mono);color:#6ee7b7">+24.7%</td>
+          <td style="font-size:11px;color:var(--text2)">翌日リスクの事前把握</td>
+        </tr>
+        <tr>
+          <td style="font-weight:700">LightGBM — Day −1</td>
+          <td style="font-family:var(--mono);color:#fcd34d">0.582</td>
+          <td style="font-family:var(--mono)">0.040</td>
+          <td style="font-family:var(--mono)">0.069</td>
+          <td style="font-family:var(--mono)">0.008</td>
+          <td style="font-family:var(--mono);color:#fcd34d">+16.4%</td>
+          <td style="font-size:11px;color:var(--text2)">比較参照用</td>
+        </tr>
+        <tr style="opacity:.4">
+          <td>ランダム予測（ベースライン）</td>
+          <td style="font-family:var(--mono)">0.500</td>
+          <td colspan="5" style="font-size:11px;color:var(--text2)">コインを投げた場合の精度</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="notice">⚠ モデルの限界：ROC-AUCはランダムを上回りますが、PR-AUCが示すようにケガは全データの約0.8〜1%の稀なイベントです。このモデルは「注意すべき選手を絞り込むスクリーニングツール」として使用し、<strong style="color:#fde68a">最終判断は必ずコーチ・トレーナーが行ってください</strong>。</div>
+
+  <div class="st">分析手法</div>
+  <div class="g2">
+    <div class="card">
+      <div class="ct">XGBoost（勾配ブースティング）</div>
+      <div class="cb">複数の決定木を順番に積み上げ、前の木が見落としたパターンを次の木が学習するアルゴリズム。J字・U字型のリスク分布（高値で危険、中間が安全）を自然に捉えられる。</div>
+    </div>
+    <div class="card">
+      <div class="ct">非線形フラグ特徴量（高値側のみ）</div>
+      <div class="cb">「7日累積距離 30,000m超」「ACWR 1.3超」などの閾値をフラグ列として追加。LOW_flag（低値フラグ）は除外し、高値リスクのみを明示的に学習させる設計。</div>
+    </div>
+  </div>
+</div>
+
+<!-- ② 指標の読み方 -->
+<div class="pane" id="p1">
+  <div class="hero">
+    <div class="hero-eye">INDICATOR GUIDE</div>
+    <div class="hero-title">GPS指標の<span>読み方ガイド</span></div>
+    <div class="hero-sub">指標名はKinexon CSVの列名をそのまま使用しています。</div>
+  </div>
+
+  <div class="st">4つの時間軸フレームとケガ予測への有効性</div>
+  <div class="ss">各フレームを単独の特徴量として XGBoost で学習・評価した結果。<span style="color:#fcd34d">★</span> は最もケガ予測に有効なフレーム。</div>
+
+  <div class="notice-b" style="margin-bottom:20px">
+    💡 <strong style="color:var(--text)">分析結果のポイント：</strong>「7日間合計（_Acute）」が Day 0・Day −1 の両方で最も高い ROC-AUC を記録。次いで「当日値（_Daily）」が Day −1 で2位。「急性慢性比（_ACWR）」は最も予測精度が低く、絶対量よりも蓄積量・当日量の方がケガと関連が強いことを示している。
+  </div>
+
+  <div class="g2" style="margin-bottom:28px;gap:16px">
+
+    <!-- _Acute(7dSum) — 1位 -->
+    <div class="card" style="border-color:rgba(139,92,246,.5);background:rgba(139,92,246,.04)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--purple);font-weight:700">_Acute(7dSum)</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-family:var(--mono);font-size:10px;background:rgba(139,92,246,.2);color:#c4b5fd;padding:2px 8px;border-radius:4px">Day0 ROC 0.718</span>
+          <span style="font-family:var(--mono);font-size:10px;background:rgba(139,92,246,.2);color:#c4b5fd;padding:2px 8px;border-radius:4px">Day-1 ROC 0.682</span>
+          <span style="font-size:11px;color:#fcd34d;font-weight:700">★ 1位</span>
+        </div>
+      </div>
+      <div class="ct" style="margin-bottom:4px">直近7日間合計 — 最もケガ予測に有効</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:12px">過去7日間の累積値。疲労・負荷の蓄積量を表す。両モデルで断トツ1位。</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--purple);margin-bottom:5px;letter-spacing:.06em">DAY 0 — 上位指標</div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_total_m</span><div class="bt"><div class="bf" style="width:100%;background:#8b5cf6"></div></div><span class="bv">0.161</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_anaerobic</span><div class="bt"><div class="bf" style="width:84%;background:#8b5cf6"></div></div><span class="bv">0.136</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">event_count_cod</span><div class="bt"><div class="bf" style="width:82%;background:#8b5cf6"></div></div><span class="bv">0.133</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">mechanical_decel</span><div class="bt"><div class="bf" style="width:79%;background:#8b5cf6"></div></div><span class="bv">0.127</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">jump_load</span><div class="bt"><div class="bf" style="width:74%;background:#8b5cf6"></div></div><span class="bv">0.119</span></div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--purple2);margin-bottom:5px;letter-spacing:.06em">DAY −1 — 上位指標</div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_total_m</span><div class="bt"><div class="bf" style="width:100%;background:#a78bfa"></div></div><span class="bv">0.165</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">mechanical_decel</span><div class="bt"><div class="bf" style="width:82%;background:#a78bfa"></div></div><span class="bv">0.136</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">accel_load_avg/min</span><div class="bt"><div class="bf" style="width:74%;background:#a78bfa"></div></div><span class="bv">0.123</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">event_count_cod</span><div class="bt"><div class="bf" style="width:73%;background:#a78bfa"></div></div><span class="bv">0.121</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">accel_load_accum</span><div class="bt"><div class="bf" style="width:71%;background:#a78bfa"></div></div><span class="bv">0.118</span></div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text2);background:rgba(139,92,246,.08);border-radius:6px;padding:7px 10px">
+        → 両モデルとも <span class="mn" style="font-size:10px">distance_total_m_Acute(7dSum)</span> が1位。週間走行距離の蓄積がケガの最大要因。
+      </div>
+    </div>
+
+    <!-- _Daily — 2位 -->
+    <div class="card" style="border-color:rgba(59,130,246,.4)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:700">_Daily</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-family:var(--mono);font-size:10px;background:rgba(59,130,246,.15);color:#93c5fd;padding:2px 8px;border-radius:4px">Day0 ROC 0.569</span>
+          <span style="font-family:var(--mono);font-size:10px;background:rgba(59,130,246,.15);color:#93c5fd;padding:2px 8px;border-radius:4px">Day-1 ROC 0.638</span>
+          <span style="font-size:11px;color:var(--text2);font-weight:700">2位</span>
+        </div>
+      </div>
+      <div class="ct" style="margin-bottom:4px">当日値 — Day −1で2位</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:12px">その日1日の記録。今日の負荷をそのまま表す。</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--accent);margin-bottom:5px;letter-spacing:.06em">DAY 0 — 上位指標</div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_anaerobic</span><div class="bt"><div class="bf" style="width:100%;background:#3b82f6"></div></div><span class="bv">0.143</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_total_m</span><div class="bt"><div class="bf" style="width:96%;background:#3b82f6"></div></div><span class="bv">0.137</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">jump_load</span><div class="bt"><div class="bf" style="width:89%;background:#3b82f6"></div></div><span class="bv">0.128</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">accel_load_avg/min</span><div class="bt"><div class="bf" style="width:88%;background:#3b82f6"></div></div><span class="bv">0.126</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">event_count_cod</span><div class="bt"><div class="bf" style="width:86%;background:#3b82f6"></div></div><span class="bv">0.123</span></div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--accent2);margin-bottom:5px;letter-spacing:.06em">DAY −1 — 上位指標</div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">jump_load</span><div class="bt"><div class="bf" style="width:100%;background:#60a5fa"></div></div><span class="bv">0.162</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">mechanical_decel</span><div class="bt"><div class="bf" style="width:89%;background:#60a5fa"></div></div><span class="bv">0.143</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_total_m</span><div class="bt"><div class="bf" style="width:86%;background:#60a5fa"></div></div><span class="bv">0.139</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">accel_load_avg/min</span><div class="bt"><div class="bf" style="width:80%;background:#60a5fa"></div></div><span class="bv">0.130</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">event_count_cod</span><div class="bt"><div class="bf" style="width:73%;background:#60a5fa"></div></div><span class="bv">0.118</span></div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text2);background:rgba(59,130,246,.06);border-radius:6px;padding:7px 10px">
+        → Day −1 では <span class="mn" style="font-size:10px">jump_load_Daily</span> が1位（0.162）。翌日ケガと前日ジャンプ量の関連が最も強い。
+      </div>
+    </div>
+
+    <!-- _ZScore — 3位 -->
+    <div class="card" style="border-color:rgba(16,185,129,.4)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--green);font-weight:700">_ZScore</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-family:var(--mono);font-size:10px;background:rgba(16,185,129,.15);color:#6ee7b7;padding:2px 8px;border-radius:4px">Day0 ROC 0.601</span>
+          <span style="font-family:var(--mono);font-size:10px;background:rgba(16,185,129,.15);color:#6ee7b7;padding:2px 8px;border-radius:4px">Day-1 ROC 0.605</span>
+          <span style="font-size:11px;color:var(--text2);font-weight:700">3位</span>
+        </div>
+      </div>
+      <div class="ct" style="margin-bottom:4px">標準化スコア — 選手個人の水準との比較</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:12px">その選手の「いつもの水準」からの乖離。0が平均、±1が標準偏差1つ分。</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--green);margin-bottom:5px;letter-spacing:.06em">DAY 0 — 上位指標</div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">event_count_cod</span><div class="bt"><div class="bf" style="width:100%;background:#10b981"></div></div><span class="bv">0.145</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_total_m</span><div class="bt"><div class="bf" style="width:98%;background:#10b981"></div></div><span class="bv">0.142</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">mechanical_decel</span><div class="bt"><div class="bf" style="width:96%;background:#10b981"></div></div><span class="bv">0.139</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">accel_load_accum</span><div class="bt"><div class="bf" style="width:87%;background:#10b981"></div></div><span class="bv">0.126</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">event_count_exert</span><div class="bt"><div class="bf" style="width:86%;background:#10b981"></div></div><span class="bv">0.124</span></div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--green2);margin-bottom:5px;letter-spacing:.06em">DAY −1 — 上位指標</div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">jump_load</span><div class="bt"><div class="bf" style="width:100%;background:#6ee7b7"></div></div><span class="bv">0.138</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">event_count_cod</span><div class="bt"><div class="bf" style="width:98%;background:#6ee7b7"></div></div><span class="bv">0.136</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_anaerobic</span><div class="bt"><div class="bf" style="width:95%;background:#6ee7b7"></div></div><span class="bv">0.131</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">accel_load_accum</span><div class="bt"><div class="bf" style="width:93%;background:#6ee7b7"></div></div><span class="bv">0.128</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">mechanical_decel</span><div class="bt"><div class="bf" style="width:93%;background:#6ee7b7"></div></div><span class="bv">0.128</span></div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text2);background:rgba(16,185,129,.06);border-radius:6px;padding:7px 10px">
+        → <span class="mn" style="font-size:10px">event_count_change_of_orientation_ZScore</span>（方向転換のいつもとの差）が Day 0・Day −1 の両方で上位。
+      </div>
+    </div>
+
+    <!-- _ACWR(EWMA) — 4位 -->
+    <div class="card" style="border-color:rgba(245,158,11,.3)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="font-family:var(--mono);font-size:12px;color:var(--amber);font-weight:700">_ACWR(EWMA)</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span style="font-family:var(--mono);font-size:10px;background:rgba(245,158,11,.15);color:#fcd34d;padding:2px 8px;border-radius:4px">Day0 ROC 0.535</span>
+          <span style="font-family:var(--mono);font-size:10px;background:rgba(245,158,11,.15);color:#fcd34d;padding:2px 8px;border-radius:4px">Day-1 ROC 0.609</span>
+          <span style="font-size:11px;color:var(--text3);font-weight:700">4位</span>
+        </div>
+      </div>
+      <div class="ct" style="margin-bottom:4px">急性：慢性負荷比 — 単独では予測精度が最低</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:12px">直近÷長期平均の比。<span style="color:#6ee7b7">安全ゾーン：0.8〜1.3</span>。1.3超=急増、0.8未満=急減。</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--amber);margin-bottom:5px;letter-spacing:.06em">DAY 0 — 上位指標</div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_anaerobic</span><div class="bt"><div class="bf" style="width:100%;background:#f59e0b"></div></div><span class="bv">0.153</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">event_count_exert</span><div class="bt"><div class="bf" style="width:88%;background:#f59e0b"></div></div><span class="bv">0.134</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">event_count_cod</span><div class="bt"><div class="bf" style="width:85%;background:#f59e0b"></div></div><span class="bv">0.131</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_total_m</span><div class="bt"><div class="bf" style="width:82%;background:#f59e0b"></div></div><span class="bv">0.126</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">jump_load</span><div class="bt"><div class="bf" style="width:80%;background:#f59e0b"></div></div><span class="bv">0.122</span></div>
+        </div>
+        <div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--amber2);margin-bottom:5px;letter-spacing:.06em">DAY −1 — 上位指標</div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">event_count_cod</span><div class="bt"><div class="bf" style="width:100%;background:#fcd34d"></div></div><span class="bv">0.158</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_anaerobic</span><div class="bt"><div class="bf" style="width:90%;background:#fcd34d"></div></div><span class="bv">0.143</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">distance_total_m</span><div class="bt"><div class="bf" style="width:85%;background:#fcd34d"></div></div><span class="bv">0.134</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">accel_load_avg/min</span><div class="bt"><div class="bf" style="width:82%;background:#fcd34d"></div></div><span class="bv">0.129</span></div>
+          <div class="br" style="margin:3px 0"><span class="bl" style="width:200px;font-size:9px">mechanical_decel</span><div class="bt"><div class="bf" style="width:76%;background:#fcd34d"></div></div><span class="bv">0.119</span></div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:11px;color:var(--text2);background:rgba(245,158,11,.06);border-radius:6px;padding:7px 10px">
+        → 単独での予測精度は最低だが「急変」の検知には有効。全特徴量で使う場合の ACWR急増フラグ（1.3超）は重要指標として機能する。
+      </div>
+    </div>
+
+  </div>
+
+  <div class="tbl-w" style="margin-bottom:24px">
+    <table>
+      <thead><tr><th>フレーム</th><th>意味</th><th>列数</th><th>ROC-AUC (Day 0)</th><th>ROC-AUC (Day −1)</th><th>予測での強み</th></tr></thead>
+      <tbody>
+        <tr>
+          <td style="font-family:var(--mono);color:#c4b5fd;font-weight:700">_Acute(7dSum) ★</td>
+          <td style="font-size:11px">7日間累積値</td>
+          <td style="font-family:var(--mono);text-align:center">8</td>
+          <td style="font-family:var(--mono);color:#6ee7b7;font-weight:700">0.718</td>
+          <td style="font-family:var(--mono);color:#6ee7b7;font-weight:700">0.682</td>
+          <td style="font-size:11px;color:var(--text2)">両モデル1位。週間走行距離の蓄積が鍵。</td>
+        </tr>
+        <tr>
+          <td style="font-family:var(--mono);color:#93c5fd;font-weight:700">_Daily</td>
+          <td style="font-size:11px">当日値</td>
+          <td style="font-family:var(--mono);text-align:center">8</td>
+          <td style="font-family:var(--mono);color:#fcd34d">0.569</td>
+          <td style="font-family:var(--mono);color:#6ee7b7">0.638</td>
+          <td style="font-size:11px;color:var(--text2)">Day −1で2位。当日のジャンプ・減速が翌日リスクに影響。</td>
+        </tr>
+        <tr>
+          <td style="font-family:var(--mono);color:#6ee7b7;font-weight:700">_ZScore</td>
+          <td style="font-size:11px">個人標準化スコア</td>
+          <td style="font-family:var(--mono);text-align:center">8</td>
+          <td style="font-family:var(--mono);color:#fcd34d">0.601</td>
+          <td style="font-family:var(--mono);color:#fcd34d">0.605</td>
+          <td style="font-size:11px;color:var(--text2)">方向転換ZScoreが両モデルで安定して上位。</td>
+        </tr>
+        <tr>
+          <td style="font-family:var(--mono);color:#fcd34d;font-weight:700">_ACWR(EWMA)</td>
+          <td style="font-size:11px">急性慢性比</td>
+          <td style="font-family:var(--mono);text-align:center">8</td>
+          <td style="font-family:var(--mono);color:var(--text3)">0.535</td>
+          <td style="font-family:var(--mono);color:#fcd34d">0.609</td>
+          <td style="font-size:11px;color:var(--text2)">単独では最低。急変の検知に限定的に有効。</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="st">計測項目カテゴリ</div>
+  <div class="g2" style="margin-bottom:20px">
+    <div class="card"><div class="ct" style="color:var(--accent2)">① 距離系</div><div style="margin-top:10px;display:flex;flex-direction:column;gap:7px"><div><span class="mn">distance_total_m</span><span style="font-size:11px;color:var(--text2);margin-left:8px">総走行距離（m）</span></div><div><span class="mn">distance_anaerobic_activity</span><span style="font-size:11px;color:var(--text2);margin-left:8px">無酸素域走行距離（高強度スプリント）</span></div></div></div>
+    <div class="card"><div class="ct" style="color:var(--purple2)">② 加速負荷系</div><div style="margin-top:10px;display:flex;flex-direction:column;gap:7px"><div><span class="mn">accel_load_accum</span><span style="font-size:11px;color:var(--text2);margin-left:8px">加速負荷の累積値</span></div><div><span class="mn">accel_load_accum_avg_per_minute</span><span style="font-size:11px;color:var(--text2);margin-left:8px">分速あたり平均加速負荷（練習強度の指標）</span></div></div></div>
+    <div class="card"><div class="ct" style="color:var(--amber2)">③ 減速負荷系</div><div style="margin-top:10px"><span class="mn">mechanical_decel_total</span><span style="font-size:11px;color:var(--text2);margin-left:8px">機械的減速負荷の合計。切り返し・急停止動作の衝撃量</span></div></div>
+    <div class="card"><div class="ct" style="color:var(--red2)">④ ジャンプ系</div><div style="margin-top:10px"><span class="mn">jump_load</span><span style="font-size:11px;color:var(--text2);margin-left:8px">ジャンプ衝撃負荷（Kinexon独自スコア）。着地衝撃含む。単位はスコアでメートルや回数ではない</span></div></div>
+    <div class="card"><div class="ct" style="color:var(--green2)">⑤ 方向転換系</div><div style="margin-top:10px"><span class="mn">event_count_change_of_orientation</span><span style="font-size:11px;color:var(--text2);margin-left:8px">方向転換の回数。<strong style="color:var(--red2)">ZScoreが低い（いつもより少ない）</strong>と受傷リスクが上昇する傾向あり</span></div></div>
+    <div class="card"><div class="ct" style="color:var(--text2)">⑥ 高強度イベント系</div><div style="margin-top:10px"><span class="mn">event_count_exertion</span><span style="font-size:11px;color:var(--text2);margin-left:8px">全力スプリント・急加速等の高強度動作の発生回数</span></div></div>
+  </div>
+  <div class="notice">⚠ <strong style="color:#fde68a">jump_load の単位に注意：</strong>Kinexon独自スコア（回数×衝撃重み）のため数値そのものに意味はなく、「自分の平均と比べて多いか少ないか（ZScore）」で判断することを推奨。全体の中央値は約11,000スコア前後。</div>
+</div>
+
+<!-- ③ ケガ予測モデル -->
+<div class="pane" id="p2">
+  <div class="hero">
+    <div class="hero-eye">PREDICTION MODEL</div>
+    <div class="hero-title">ケガ予測モデルの<span>仕組みと精度</span></div>
+    <div class="hero-sub">XGBoost で「翌日ケガをしやすい状態かどうか」を前日のGPSデータから予測します。</div>
+  </div>
+
+  <div class="st">2つのモデルの使い分け</div>
+  <div class="g2" style="margin-bottom:28px">
+    <div class="card" style="border-color:rgba(59,130,246,.3)">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--accent);margin-bottom:10px">DAY −1 モデル — 日常の翌日予測</div>
+      <div class="ct" style="font-size:14px;margin-bottom:10px">前日GPSで「明日ケガをするか」を予測</div>
+      <div class="cb"><strong style="color:var(--text)">ラベル：</strong>前日のGPSデータに「翌日受傷した」フラグを付与して学習<br><br><strong style="color:var(--text)">活用：</strong>練習後にGPSデータを確認し、翌朝のメニュー調整の根拠にする<br><br><strong style="color:var(--text)">ROC-AUC：</strong><span style="color:var(--accent2);font-family:var(--mono);font-size:16px">0.624</span>&nbsp;&nbsp;<span style="font-size:11px;color:var(--text2)">ランダム比 +24.7% | Best閾値 0.091</span></div>
+    </div>
+    <div class="card" style="border-color:rgba(139,92,246,.3)">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--purple);margin-bottom:10px">DAY 0 モデル — 事後分析・要因理解</div>
+      <div class="ct" style="font-size:14px;margin-bottom:10px">当日GPSで「なぜその日にケガが起きたか」を分析</div>
+      <div class="cb"><strong style="color:var(--text)">ラベル：</strong>受傷当日のGPSデータにフラグを付与して学習<br><small style="color:var(--text3)">※LOW_flag除外により序盤受傷の低値バイアスに対処</small><br><br><strong style="color:var(--text)">活用：</strong>ケガが起きた後の振り返り・再発防止パターンの把握<br><br><strong style="color:var(--text)">ROC-AUC：</strong><span style="color:var(--purple2);font-family:var(--mono);font-size:16px">0.697</span>&nbsp;&nbsp;<span style="font-size:11px;color:var(--text2)">ランダム比 +39.4% | Best閾値 0.164</span></div>
+    </div>
+  </div>
+
+  <div class="st">精度指標の読み方</div>
+  <div class="g3" style="margin-bottom:20px">
+    <div class="card">
+      <div class="ct">ROC-AUC</div>
+      <div class="cb">0.5 = ランダム、1.0 = 完璧。本モデルは 0.624〜0.697 でランダムより有意に高い。「傾向の把握」に有効な水準。</div>
+    </div>
+    <div class="card">
+      <div class="ct">PR-AUC（Average Precision）</div>
+      <div class="cb">不均衡データでの実用精度。ケガは全体の約0.8〜1%の稀なイベントのため低くなるが、0.024〜0.040 はランダム（≈0.009）の 3〜4倍。</div>
+    </div>
+    <div class="card">
+      <div class="ct">Best Threshold（推奨閾値）</div>
+      <div class="cb">Day-1 XGB は 0.091 がF1最大点。デフォルト0.5ではなくこの閾値でアラートを出すことを推奨。感度と特異度のバランスが最良。</div>
+    </div>
+  </div>
+  <div class="notice">⚠ このモデルは「参考情報」として使うものです。アラートが出た選手が必ずケガをするわけではなく、アラートが出なくてもケガをすることがあります。GPS指標と主観的疲労（RPE）・コーチの観察を組み合わせて判断してください。</div>
+</div>
+
+<!-- ④ 重要指標ランキング -->
+<div class="pane" id="p3">
+  <div class="hero">
+    <div class="hero-eye">FEATURE IMPORTANCE</div>
+    <div class="hero-title">ケガ予測に効く<span>重要指標ランキング</span></div>
+    <div class="hero-sub">XGBoost が学習した特徴量重要度。<span style="color:#fca5a5">■ 赤</span>は追加した非線形フラグ列、<span style="color:#60a5fa">■ 青</span>はGPS基本指標。</div>
+  </div>
+
+  <div class="notice-b">💡 両モデルで共通する最大の知見：<strong style="color:var(--text)">「7日間累積走行距離の蓄積」がすべてのケガリスクの根本</strong>。Day 0（当日分析）では累積距離30,000m超フラグ（重要度0.145）が1位、Day −1（翌日予測）では累積距離22,922m超フラグ（0.110）が1位。週間走行量の管理が最優先。</div>
+
+  <div class="g2" style="margin-bottom:28px">
+    <div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--accent);margin-bottom:14px;letter-spacing:.06em">DAY 0 — 受傷当日の要因分析（XGBoost・当日GPS）</div>
+      <div class="br"><span class="bl" style="color:#fca5a5">acute_dist_HIGH_flag 🚩</span><div class="bt"><div class="bf" style="width:100%;background:#ef4444"></div></div><span class="bv">0.145</span></div>
+      <div class="br"><span class="bl" style="color:#fca5a5">acute_dist_WARN_flag 🚩</span><div class="bt"><div class="bf" style="width:45%;background:#ef4444"></div></div><span class="bv">0.065</span></div>
+      <div class="br"><span class="bl">distance_total_m_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:28%;background:#3b82f6"></div></div><span class="bv">0.041</span></div>
+      <div class="br"><span class="bl">mechanical_decel_total_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:25%;background:#3b82f6"></div></div><span class="bv">0.037</span></div>
+      <div class="br"><span class="bl">distance_anaerobic_activity_Daily</span><div class="bt"><div class="bf" style="width:24%;background:#3b82f6"></div></div><span class="bv">0.035</span></div>
+      <div class="br"><span class="bl">jump_load_Daily</span><div class="bt"><div class="bf" style="width:23%;background:#3b82f6"></div></div><span class="bv">0.033</span></div>
+      <div class="br"><span class="bl">distance_total_m_Daily</span><div class="bt"><div class="bf" style="width:22%;background:#60a5fa"></div></div><span class="bv">0.032</span></div>
+      <div class="br"><span class="bl">event_count_change_of_orientation_ZScore</span><div class="bt"><div class="bf" style="width:22%;background:#60a5fa"></div></div><span class="bv">0.031</span></div>
+      <div class="br"><span class="bl">accel_load_accum_Daily</span><div class="bt"><div class="bf" style="width:21%;background:#60a5fa"></div></div><span class="bv">0.031</span></div>
+      <div class="br"><span class="bl">event_count_change_of_orientation_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:20%;background:#60a5fa"></div></div><span class="bv">0.028</span></div>
+      <div style="margin-top:8px;font-size:10px;color:#fca5a5">🚩 = 追加した非線形フラグ列（高値側のみ）</div>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--purple);margin-bottom:14px;letter-spacing:.06em">DAY −1 — 翌日ケガ予測（XGBoost）★ 実務の主軸</div>
+      <div class="br"><span class="bl" style="color:#fca5a5">acute_dist_WARN_flag 🚩</span><div class="bt"><div class="bf" style="width:100%;background:#ef4444"></div></div><span class="bv">0.110</span></div>
+      <div class="br"><span class="bl">jump_load_Daily</span><div class="bt"><div class="bf" style="width:51%;background:#8b5cf6"></div></div><span class="bv">0.056</span></div>
+      <div class="br"><span class="bl">accel_load_accum_ZScore</span><div class="bt"><div class="bf" style="width:43%;background:#8b5cf6"></div></div><span class="bv">0.047</span></div>
+      <div class="br"><span class="bl">distance_total_m_Daily</span><div class="bt"><div class="bf" style="width:32%;background:#8b5cf6"></div></div><span class="bv">0.035</span></div>
+      <div class="br"><span class="bl">mechanical_decel_total_Daily</span><div class="bt"><div class="bf" style="width:32%;background:#8b5cf6"></div></div><span class="bv">0.035</span></div>
+      <div class="br"><span class="bl">distance_anaerobic_activity_ZScore</span><div class="bt"><div class="bf" style="width:32%;background:#a78bfa"></div></div><span class="bv">0.035</span></div>
+      <div class="br"><span class="bl">event_count_change_of_orientation_ZScore</span><div class="bt"><div class="bf" style="width:31%;background:#a78bfa"></div></div><span class="bv">0.035</span></div>
+      <div class="br"><span class="bl">distance_total_m_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:29%;background:#a78bfa"></div></div><span class="bv">0.032</span></div>
+      <div class="br"><span class="bl">accel_load_accum_avg_per_minute_Daily</span><div class="bt"><div class="bf" style="width:28%;background:#a78bfa"></div></div><span class="bv">0.031</span></div>
+      <div class="br"><span class="bl">mechanical_decel_total_ACWR(EWMA)</span><div class="bt"><div class="bf" style="width:26%;background:#a78bfa"></div></div><span class="bv">0.029</span></div>
+      <div style="margin-top:8px;font-size:10px;color:#fca5a5">🚩 = 追加した非線形フラグ列（高値側のみ）</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+  <div class="st">重要度分析から読み取れること</div>
+  <div class="g3">
+    <div class="card" style="border-color:rgba(239,68,68,.3)">
+      <div class="tag tr" style="margin-bottom:8px">Day 0 の最大発見</div>
+      <div class="ct">7日累積距離 30,000m超 が断トツ1位</div>
+      <div class="cb"><span class="fn">acute_dist_HIGH_flag</span>（重要度0.145）。7日間の累積距離が30,000mを超えた日に受傷が集中。週間走行量が極めて多い状態での練習・試合が最大のリスク要因。</div>
+    </div>
+    <div class="card" style="border-color:rgba(239,68,68,.3)">
+      <div class="tag tr" style="margin-bottom:8px">Day −1 の最大発見</div>
+      <div class="ct">7日累積距離 22,922m超 が翌日予測の核心</div>
+      <div class="cb"><span class="fn">acute_dist_WARN_flag</span>（重要度0.110）。前日時点の7日間累積走行距離が22,922mを超えているかどうかが、翌日ケガリスクの最大の判断軸。週間走行量の管理が予防の基盤。</div>
+    </div>
+    <div class="card" style="border-color:rgba(245,158,11,.3)">
+      <div class="tag ta" style="margin-bottom:8px">Day −1 の注目</div>
+      <div class="ct">加速負荷ZScoreと減速負荷Dailyが上位</div>
+      <div class="cb"><span class="mn">accel_load_accum_ZScore</span>（3位・0.047）と<span class="mn">mechanical_decel_total_Daily</span>（5位・0.035）が上位。「いつもより加速・減速が多い日」の翌日に筋肉系・切り返し系のケガリスクが上昇。</div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑤ リスクルールと受傷事例 -->
+<div class="pane" id="p4">
+  <div class="hero">
+    <div class="hero-eye">RISK RULES × REAL CASES</div>
+    <div class="hero-title">リスクルールと<span>実際の受傷事例</span></div>
+    <div class="hero-sub">XGBoost の分析から導出した判断ルールを、実際の受傷41件と照合しました。</div>
+  </div>
+
+  <div class="g4" style="margin-bottom:24px">
+    <div class="kpi"><div class="kl">照合した受傷事例</div><div class="kv">41件</div><div class="kn">非接触66件中</div></div>
+    <div class="kpi"><div class="kl">高負荷週×ジャンプ高</div><div class="kv" style="color:var(--red2)">20件</div><div class="kn">ルールA 該当</div></div>
+    <div class="kpi"><div class="kl">Acute距離警戒ゾーン</div><div class="kv" style="color:var(--red2)">19件</div><div class="kn">32,544m超で受傷</div></div>
+    <div class="kpi"><div class="kl">COD ZScore低下</div><div class="kv" style="color:var(--amber2)">18件</div><div class="kn">前日 −1.0未満</div></div>
+  </div>
+
+  <div class="notice-b" style="margin-bottom:16px">📅 <strong style="color:var(--text)">確認のタイミング：これらのルールはすべて「前日のGPSデータ」で判断します。</strong>前日の練習・試合後にデータを確認し、翌日のメニューに反映させるのが基本的な使い方です。⑥の実践基準チェックポイントと対応しています。</div>
+
+  <div class="rule">
+    <div class="rule-t">ルールA — 高負荷週 × ジャンプ過多 × 走行距離多（3点セット）</div>
+    <div class="rule-c">① distance_total_m_Acute(7dSum) &gt; 22,922m　→ <span style="color:#fcd34d">⑥ CHECK 1 に対応</span><br>② jump_load_Daily &gt; 25,000　　　　　　　　　→ <span style="color:#fcd34d">⑥ CHECK 2（上限）に対応</span><br>③ distance_total_m_Daily &gt; 2,406m　　　　　→ <span style="color:#fcd34d">⑥ CHECK 2 の補足条件</span></div>
+    <div class="rule-n">最も頻度の高い受傷パターン（20件）。①②はCHECK1・2で毎日確認し、③は①②が両方該当したときに追加確認する。</div>
+  </div>
+  <div class="rule amber">
+    <div class="rule-t">ルールB — 高負荷週 × 方向転換減少（⑥ CHECK 1 + CHECK 4 の同時点灯）</div>
+    <div class="rule-c">① distance_total_m_Acute(7dSum) &gt; 22,922m　→ <span style="color:#fcd34d">⑥ CHECK 1 に対応</span><br>② event_count_change_of_orientation_ZScore &lt; −1.0　→ <span style="color:#fcd34d">⑥ CHECK 4 に対応</span></div>
+    <div class="rule-n"><strong style="color:var(--text)">⚠ CHECK 4 単体では軽度のリスク。CHECK 1（高負荷週）と同時に該当した場合が最大リスク。</strong>走行量は多いのに方向転換が減る＝全身疲労で動きを無意識にセーブしているサイン。</div>
+  </div>
+  <div class="rule amber">
+    <div class="rule-t">ルールC — COD ZScore 2日以上連続低下（疲労蓄積の確実なサイン）</div>
+    <div class="rule-c">event_count_change_of_orientation_ZScore &lt; −1.0　が 2日以上連続　→ <span style="color:#fcd34d">⑥ CHECK 4・CHECK 5 に対応</span></div>
+    <div class="rule-n">1日だけの低下は練習内容の違いで起こりやすいが、<strong style="color:var(--text)">2日以上連続で−1.0を下回る場合は全身疲労の蓄積サインとして信頼性が高い。</strong>高負荷週でなくても観察対象にする。ルールB（高負荷週との複合）と重なると最大リスクに昇格する。</div>
+  </div>
+  <div class="rule green">
+    <div class="rule-t">安全の目安（すべてのCHECKが正常範囲）</div>
+    <div class="rule-c">distance_total_m_Acute(7dSum) ≤ 22,922m　→ CHECK 1 正常<br>jump_load_Daily が 5,000〜25,000 の中間帯　→ CHECK 2 正常<br>各ACWR が 0.8〜1.3 の範囲内　　　　　　　→ CHECK 3 正常</div>
+    <div class="rule-n">これら3つのCHECKがすべて正常範囲を満たす状態は受傷率が最も低い。3つ同時に正常であれば翌日のフルメニュー実施の目安となる。</div>
+  </div>
+
+  <hr class="divider">
+  <div class="st">受傷事例一覧（前日 Kinexon データと照合）</div>
+  <div class="ss">数値はすべて受傷前日のGPSデータ。<span style="color:#fca5a5">赤</span>は閾値超過、<span style="color:#fcd34d">橙</span>は警戒域。</div>
+
+  <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+    <button class="fbtn active" onclick="fc('all',event)">すべて (41件)</button>
+    <button class="fbtn" onclick="fc('ルールA',event)">ルールA (20件)</button>
+    <button class="fbtn" onclick="fc('ルールB',event)">ルールB (2件)</button>
+    <button class="fbtn" onclick="fc('ルールC',event)">ルールC 単体 (15件)</button>
+    <button class="fbtn" onclick="fc('週間距離警戒',event)">週間距離警戒 (19件)</button>
+    <button class="fbtn" onclick="fc('COD低下',event)">COD ZScore低下 (18件)</button>
+  </div>
+  <div class="tbl-w">
+    <table><thead><tr>
+      <th>Player Name</th><th>受傷日</th><th>傷害種別</th><th>受傷部位</th>
+      <th>distance_total_m_Acute(7dSum)</th>
+      <th>jump_load_Daily</th>
+      <th>mechanical_decel_total_ACWR(EWMA)</th>
+      <th>event_count_change_of_orientation_ZScore</th>
+      <th>フラグ</th>
+    </tr></thead>
+    <tbody id="cTbody"></tbody></table>
+  </div>
+
+  <hr class="divider">
+  <div class="st">インタラクション分析：前日累積距離 × 前日ジャンプゾーン → 受傷率</div>
+  <div class="ss">前日のAcute距離とジャンプゾーン（低〜中 / 中間 / 高値）の組み合わせ別の受傷率ヒートマップ</div>
+  <div class="g2">
+    <div>
+      <div style="background:var(--bg3);border-radius:8px;padding:14px;font-size:12px">
+        <div style="display:grid;grid-template-columns:170px repeat(3,1fr);gap:3px;margin-bottom:3px">
+          <div style="font-size:10px;color:var(--text2);font-family:var(--mono)">前日 Acute 距離</div>
+          <div style="font-size:10px;color:var(--text2);font-family:var(--mono);text-align:center">低〜中(&lt;10k)</div>
+          <div style="font-size:10px;color:var(--text2);font-family:var(--mono);text-align:center">中間(10-25k)</div>
+          <div style="font-size:10px;color:var(--text2);font-family:var(--mono);text-align:center">高値(&gt;25k)</div>
+        </div>
+        <div style="display:grid;grid-template-columns:170px repeat(3,1fr);gap:3px;margin-bottom:3px">
+          <div style="font-size:10px;color:var(--text2);font-family:var(--mono);display:flex;align-items:center">〜20,096m</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.05);color:var(--text2)">0.28%</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.05);color:var(--text2)">0.00%</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.05);color:var(--text2)">0.00%</div>
+        </div>
+        <div style="display:grid;grid-template-columns:170px repeat(3,1fr);gap:3px;margin-bottom:3px">
+          <div style="font-size:10px;color:var(--text2);font-family:var(--mono);display:flex;align-items:center">20,096〜27,967m</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.05);color:var(--text2)">0.00%</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(59,130,246,.2);color:#93c5fd">0.75%</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(245,158,11,.25);color:#fcd34d">1.67%</div>
+        </div>
+        <div style="display:grid;grid-template-columns:170px repeat(3,1fr);gap:3px;margin-bottom:3px">
+          <div style="font-size:10px;color:var(--text2);font-family:var(--mono);display:flex;align-items:center">27,967〜36,998m</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.08);color:var(--text2)">0.30%</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(245,158,11,.3);color:#fcd34d">0.97%</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(239,68,68,.6);color:#fff;font-weight:700">8.18% ⚠</div>
+        </div>
+        <div style="display:grid;grid-template-columns:170px repeat(3,1fr);gap:3px">
+          <div style="font-size:10px;color:var(--text2);font-family:var(--mono);display:flex;align-items:center">36,998m〜</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.05);color:var(--text2)">0.00%</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(255,255,255,.08);color:var(--text2)">0.35%</div>
+          <div style="padding:7px;border-radius:4px;text-align:center;font-family:var(--mono);font-size:11px;background:rgba(245,158,11,.4);color:#fcd34d">3.30%</div>
+        </div>
+        <div style="margin-top:10px;font-size:11px;color:var(--text2)">→ 高負荷週（27,967m超）× 高ジャンプ（25,000超）の組み合わせで受傷率 <strong style="color:#fca5a5">8.18%</strong> と突出して最大。</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="card" style="border-color:rgba(239,68,68,.3)">
+        <span style="display:inline-block;font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:4px;background:rgba(239,68,68,.15);color:#fca5a5;margin-bottom:6px">Acute距離 最大事例</span>
+        <div class="ct" style="font-size:13px">Hayato Wakugawa — 2025-03-08</div>
+        <div class="cb">関節捻挫(靭帯損傷)・足関節。前日 <span class="mn">distance_total_m_Acute(7dSum)</span> = <strong style="color:#fca5a5">48,000m</strong>（全事例中最大・警戒ライン22,922mの約2倍）。</div>
+      </div>
+      <div class="card" style="border-color:rgba(245,158,11,.3)">
+        <span style="display:inline-block;font-size:10px;font-family:var(--mono);padding:3px 8px;border-radius:4px;background:rgba(245,158,11,.15);color:#fcd34d;margin-bottom:6px">同日3選手受傷</span>
+        <div class="ct" style="font-size:13px">2024-10-05 — Sasaki / Oura / Nwaba</div>
+        <div class="cb">3選手が同日に筋痙攣（下腿）。全員の前日 <span class="mn">event_count_change_of_orientation_ZScore</span> がマイナス。チーム全体の過負荷を示す典型事例。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑥ 強度管理の実践基準 -->
+<div class="pane" id="p5">
+  <div class="hero">
+    <div class="hero-eye">PRACTICAL GUIDELINES</div>
+    <div class="hero-title">強度管理の<span>実践基準</span></div>
+    <div class="hero-sub">XGBoost 分析から導出した数値基準。前日練習後にこの順番で確認し、翌日のメニューを調整します。</div>
+  </div>
+
+  <div class="st">毎日確認する6つのチェックポイント</div>
+  <div class="ss">⑤のリスクルール A・B と対応しています</div>
+  <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:28px">
+    <div class="card" style="border-color:rgba(239,68,68,.3)">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">CHECK 1　→ ⑤ ルールA・B 共通の起点</div>
+      <div style="font-size:19px;font-weight:700;color:var(--red2);margin-bottom:3px">22,922m</div>
+      <div class="mn" style="margin-bottom:8px;display:block">distance_total_m_Acute(7dSum)</div>
+      <div style="font-size:11px;color:var(--text2)">週間累積走行距離の警戒ライン。<strong style="color:var(--text)">ルールA・B両方の起点となる最重要確認項目。</strong>超えたら翌日のスプリント・ジャンプ系を削減。Day −1 重要度 1位。</div>
+    </div>
+    <div class="card" style="border-color:rgba(239,68,68,.3)">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">CHECK 2　→ ⑤ ルールA（上限・補足条件）</div>
+      <div style="font-size:19px;font-weight:700;color:var(--red2);margin-bottom:3px">25,000超</div>
+      <div class="mn" style="margin-bottom:8px;display:block">jump_load_Daily</div>
+      <div style="font-size:11px;color:var(--text2)">25,000超 = 過多リスク（30k超で受傷率ピーク）。CHECK1と同時該当でルールA成立。さらに <span class="mn" style="font-size:10px">distance_total_m_Daily &gt;2,406m</span> も重なると3点セット。</div>
+    </div>
+    <div class="card" style="border-color:rgba(245,158,11,.3)">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">CHECK 3　→ ⑤ 安全の目安</div>
+      <div style="font-size:19px;font-weight:700;color:var(--amber2);margin-bottom:3px">0.8 〜 1.3</div>
+      <div class="mn" style="margin-bottom:8px;display:block">各種_ACWR(EWMA)</div>
+      <div style="font-size:11px;color:var(--text2)">全ACWR指標の安全ゾーン。1.3超 = 急増、0.8未満 = 急減。急に増やさない・急に減らさないが基本原則。</div>
+    </div>
+    <div class="card" style="border-color:rgba(239,68,68,.3)">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">CHECK 4　→ ⑤ ルールB（CHECK 1と必ずセットで判断）</div>
+      <div style="font-size:19px;font-weight:700;color:var(--amber2);margin-bottom:3px">−1.0 未満</div>
+      <div class="mn" style="margin-bottom:8px;display:block">event_count_change_of_orientation_ZScore</div>
+      <div style="font-size:11px;color:var(--text2)">単体では軽度のサイン。<strong style="color:#fca5a5">CHECK 1（22,922m超）と同時に点灯した場合がルールB = 最大リスク。</strong>この2つが同日に重なった選手は最優先フォロー対象。</div>
+    </div>
+    <div class="card" style="border-color:rgba(245,158,11,.3)">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">CHECK 5</div>
+      <div style="font-size:19px;font-weight:700;color:var(--amber2);margin-bottom:3px">2日連続</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:8px">COD ZScore低下の継続</div>
+      <div style="font-size:11px;color:var(--text2)">1日だけの低下は正常範囲内のことも多い。2日以上連続で低下している選手を優先フォロー対象とする（= <strong style="color:var(--text)">⑤ ルールCの成立</strong>）。疲労の蓄積が長期化しているサイン。</div>
+    </div>
+    <div class="card">
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:4px">CHECK 6　→ チーム全体で判断</div>
+      <div style="font-size:19px;font-weight:700;color:var(--text2);margin-bottom:3px">複数選手同時</div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:8px">チーム全体の Acute 値</div>
+      <div style="font-size:11px;color:var(--text2)">複数選手がCHECK1〜4に同日引っかかった場合 → 個人の問題ではなくチーム全体の練習負荷過多のサイン。翌日メニューのチーム全体見直しのトリガー。</div>
+    </div>
+  </div>
+
+  <hr class="divider">
+  <div class="st">リスク分布グラフ</div>
+  <div class="ss">各指標と受傷率の関係。等間隔ビンで集計した実データより作成。</div>
+  <div class="g2" style="margin-bottom:20px">
+    <div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:6px">distance_total_m_Acute(7dSum) — Day 0 / 5,000m等間隔</div>
+      <div style="position:relative;height:160px"><canvas id="cAcute"></canvas></div>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:6px">jump_load_Daily — Day 0 / 5,000等間隔（25k超から急上昇）</div>
+      <div style="position:relative;height:160px"><canvas id="cJump"></canvas></div>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:6px">accel_load_accum_ACWR(EWMA) — Day 0 / 0.25等間隔</div>
+      <div style="position:relative;height:160px"><canvas id="cAcwr"></canvas></div>
+    </div>
+    <div>
+      <div style="font-family:var(--mono);font-size:10px;color:var(--text3);margin-bottom:6px">accel_load_accum_ZScore — Day -1 / 10分位</div>
+      <div style="position:relative;height:160px"><canvas id="cAccZ"></canvas></div>
+    </div>
+  </div>
+
+  <hr class="divider">
+  <div class="st">運用フローの推奨</div>
+  <div style="background:var(--bg3);border-radius:10px;padding:16px;font-size:12px">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <div style="background:var(--bg4);border-radius:6px;padding:7px 13px;white-space:nowrap">前日練習後<br>GPSデータ確認</div>
+      <div style="color:var(--text3)">→</div>
+      <div style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.3);border-radius:6px;padding:7px 13px;white-space:nowrap">6つのCHECK<br>ポイント確認</div>
+      <div style="color:var(--text3)">→</div>
+      <div style="background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.3);border-radius:6px;padding:7px 13px;white-space:nowrap">2つ以上該当<br>→ 優先フォロー</div>
+      <div style="color:var(--text3)">→</div>
+      <div style="background:rgba(245,158,11,.15);border:1px solid rgba(245,158,11,.3);border-radius:6px;padding:7px 13px;white-space:nowrap">翌朝 声がけ<br>+ 主観疲労確認</div>
+      <div style="color:var(--text3)">→</div>
+      <div style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);border-radius:6px;padding:7px 13px;white-space:nowrap">メニュー調整<br>or 通常通り</div>
+    </div>
+    <div style="margin-top:10px;color:var(--text2)">推奨閾値スコア：XGBoost Day −1 スコア <strong style="color:var(--text)">0.091</strong> 以上の選手を優先フォロー対象とする（Best F1 最大点）。最終判断は必ず人が行う。</div>
+  </div>
+</div>
+
+<!-- ⑦ 傷害種別の分析 -->
+<div class="pane" id="p6">
+  <div class="hero">
+    <div class="hero-eye">INJURY TYPE ANALYSIS</div>
+    <div class="hero-title">傷害種別の<span>重要指標分析</span></div>
+    <div class="hero-sub">傷害の種類によって「見るべき指標」が異なります。XGBoost の部位別分析結果（Day −1）。</div>
+  </div>
+
+  <div class="tbl-w" style="margin-bottom:24px">
+    <table>
+      <thead><tr><th>傷害種別</th><th>最重要指標（1位）</th><th>重要度</th><th>種別</th><th>予防の観点</th></tr></thead>
+      <tbody>
+        <tr><td style="font-weight:700">軟骨損傷(半月板等)</td><td><span class="mn">jump_load_Daily</span></td><td style="font-family:var(--mono);color:#fca5a5">0.179</td><td><span class="tag tb">GPS基本</span></td><td style="font-size:11px;color:var(--text2)">ジャンプ負荷が最重要。加速負荷Acute（0.171）も2位と拮抗。ジャンプと加速の週間蓄積を管理する。</td></tr>
+        <tr><td style="font-weight:700">関節炎/滑液包炎</td><td><span class="fn">distance_total_m_ACWREWMA_HIGH_flag</span></td><td style="font-family:var(--mono);color:#fca5a5">0.143</td><td><span class="tag tr">ACWRフラグ</span></td><td style="font-size:11px;color:var(--text2)">走行量ACWR急増フラグが1位。ジャンプACWR急増（0.138）も2位と並立。両方のACWR管理が必須。</td></tr>
+        <tr><td style="font-weight:700">肉ばなれ/筋断裂</td><td><span class="mn">mechanical_decel_total_Daily</span></td><td style="font-family:var(--mono);color:var(--amber2)">0.115</td><td><span class="tag tb">GPS基本</span></td><td style="font-size:11px;color:var(--text2)">当日の急減速負荷が最重要。切り返し・急停止の多い日の翌日に多発。高負荷週後半の激しい練習を制限する。</td></tr>
+        <tr><td style="font-weight:700">関節捻挫(靭帯損傷)</td><td><span class="mn">distance_total_m_ACWR(EWMA)</span></td><td style="font-family:var(--mono);color:var(--amber2)">0.116</td><td><span class="tag tb">GPS基本</span></td><td style="font-size:11px;color:var(--text2)">走行量ACWRの急変が最重要。急に走行量を増やした翌日に足関節・膝の捻挫が多い。</td></tr>
+        <tr><td style="font-weight:700">筋痙攣</td><td><span class="fn">acute_dist_WARN_flag</span></td><td style="font-family:var(--mono);color:var(--amber2)">0.105</td><td><span class="tag tr">距離フラグ</span></td><td style="font-size:11px;color:var(--text2)">週間走行距離フラグが1位。高負荷週の疲労蓄積が主因。水分・電解質管理と高負荷週の負荷コントロールを組み合わせる。</td></tr>
+        <tr><td style="font-weight:700">筋膜/腱膜炎</td><td><span class="mn">event_count_exertion_Acute(7dSum)</span></td><td style="font-family:var(--mono);color:var(--amber2)">0.121</td><td><span class="tag tb">GPS基本</span></td><td style="font-size:11px;color:var(--text2)">週間の高強度イベント数の蓄積が最重要。慢性的な繰り返し負荷が腱・膜を疲弊させる。</td></tr>
+        <tr><td style="font-weight:700">打撲傷(表在性)</td><td><span class="mn">jump_load_ZScore</span></td><td style="font-family:var(--mono);color:var(--amber2)">0.199</td><td><span class="tag tb">GPS基本</span></td><td style="font-size:11px;color:var(--text2)">いつもより多いジャンプの日に発生しやすい。高強度・高ジャンプの日はコンタクト場面にも注意。</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="st">傷害種別の詳細（展開して確認）</div>
+
+  <div class="acc open">
+    <div class="acc-h" onclick="ta(this)"><span>軟骨損傷(半月板等) — <span style="color:#fca5a5;font-family:var(--mono)">jump_load_Daily（0.179）と加速負荷 Acute（0.171）が1・2位</span></span><span class="acc-a">▼</span></div>
+    <div class="acc-b">
+      <div class="br"><span class="bl">jump_load_Daily</span><div class="bt"><div class="bf" style="width:100%;background:#8b5cf6"></div></div><span class="bv">0.179</span></div>
+      <div class="br"><span class="bl">accel_load_accum_avg_per_minute_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:96%;background:#8b5cf6"></div></div><span class="bv">0.171</span></div>
+      <div class="br"><span class="bl">jump_load_ZScore</span><div class="bt"><div class="bf" style="width:85%;background:#8b5cf6"></div></div><span class="bv">0.153</span></div>
+      <div class="br"><span class="bl">accel_load_accum_Daily</span><div class="bt"><div class="bf" style="width:64%;background:#8b5cf6"></div></div><span class="bv">0.115</span></div>
+      <div class="br"><span class="bl">distance_total_m_ZScore</span><div class="bt"><div class="bf" style="width:25%;background:#8b5cf6"></div></div><span class="bv">0.044</span></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text2)">→ ジャンプ量と加速負荷の絶対値・ZScoreが上位を占める。「ジャンプが多い日、加速が多い週」の翌日に半月板リスクが上昇。ZScoreが高い（いつもより多い）日も要注意。過去に膝の痛みがある選手は特に意識する。</div>
+    </div>
+  </div>
+
+  <div class="acc">
+    <div class="acc-h" onclick="ta(this)"><span>関節炎/滑液包炎/滑膜炎 — 走行量・ジャンプACWR急増フラグが1・2位</span><span class="acc-a">▼</span></div>
+    <div class="acc-b">
+      <div class="br"><span class="bl" style="color:#fca5a5">distance_total_m_ACWREWMA_HIGH_flag 🚩</span><div class="bt"><div class="bf" style="width:100%;background:#ef4444"></div></div><span class="bv">0.143</span></div>
+      <div class="br"><span class="bl" style="color:#fca5a5">jump_load_ACWREWMA_HIGH_flag 🚩</span><div class="bt"><div class="bf" style="width:97%;background:#ef4444"></div></div><span class="bv">0.138</span></div>
+      <div class="br"><span class="bl">distance_anaerobic_activity_Daily</span><div class="bt"><div class="bf" style="width:77%;background:#8b5cf6"></div></div><span class="bv">0.109</span></div>
+      <div class="br"><span class="bl" style="color:#fca5a5">acute_dist_HIGH_flag 🚩</span><div class="bt"><div class="bf" style="width:50%;background:#ef4444"></div></div><span class="bv">0.071</span></div>
+      <div class="br"><span class="bl">jump_load_ACWR(EWMA)</span><div class="bt"><div class="bf" style="width:44%;background:#8b5cf6"></div></div><span class="bv">0.062</span></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text2)">→ 走行量とジャンプ、2種類のACWR急増フラグが並立して1・2位。炎症系は量の絶対値より「変化の急激さ」が危険。急にどちらか一方だけ増やしても起きるため、走行量とジャンプの両方を段階的に管理する必要がある。</div>
+    </div>
+  </div>
+
+  <div class="acc">
+    <div class="acc-h" onclick="ta(this)"><span>肉ばなれ/筋断裂 — 減速負荷 Daily が1位</span><span class="acc-a">▼</span></div>
+    <div class="acc-b">
+      <div class="br"><span class="bl">mechanical_decel_total_Daily</span><div class="bt"><div class="bf" style="width:100%;background:#8b5cf6"></div></div><span class="bv">0.115</span></div>
+      <div class="br"><span class="bl">mechanical_decel_total_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:76%;background:#8b5cf6"></div></div><span class="bv">0.087</span></div>
+      <div class="br"><span class="bl" style="color:#fca5a5">acute_dist_WARN_flag 🚩</span><div class="bt"><div class="bf" style="width:73%;background:#ef4444"></div></div><span class="bv">0.084</span></div>
+      <div class="br"><span class="bl">event_count_exertion_Daily</span><div class="bt"><div class="bf" style="width:70%;background:#8b5cf6"></div></div><span class="bv">0.080</span></div>
+      <div class="br"><span class="bl">distance_anaerobic_activity_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:64%;background:#8b5cf6"></div></div><span class="bv">0.074</span></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text2)">→ 急減速負荷が1位。切り返し・急停止動作の多い日（当日＋週間累積）と高負荷週の組み合わせで肉離れリスクが上昇。高負荷週後半の激しいコンタクト・方向転換系メニューを制限することが有効。</div>
+    </div>
+  </div>
+
+  <div class="acc">
+    <div class="acc-h" onclick="ta(this)"><span>関節捻挫(靭帯損傷) — 走行量ACWR と 高強度イベント Daily が上位</span><span class="acc-a">▼</span></div>
+    <div class="acc-b">
+      <div class="br"><span class="bl">distance_total_m_ACWR(EWMA)</span><div class="bt"><div class="bf" style="width:100%;background:#8b5cf6"></div></div><span class="bv">0.116</span></div>
+      <div class="br"><span class="bl">event_count_exertion_Daily</span><div class="bt"><div class="bf" style="width:89%;background:#8b5cf6"></div></div><span class="bv">0.104</span></div>
+      <div class="br"><span class="bl">distance_anaerobic_activity_ACWR(EWMA)</span><div class="bt"><div class="bf" style="width:85%;background:#8b5cf6"></div></div><span class="bv">0.099</span></div>
+      <div class="br"><span class="bl">accel_load_accum_avg_per_minute_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:55%;background:#8b5cf6"></div></div><span class="bv">0.064</span></div>
+      <div class="br"><span class="bl">accel_load_accum_avg_per_minute_Daily</span><div class="bt"><div class="bf" style="width:55%;background:#8b5cf6"></div></div><span class="bv">0.063</span></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text2)">→ 走行量ACWRの急変が最重要。急に走行量を増やした翌日に足関節・膝の捻挫が多い。週単位での走行量の段階的な増減管理が有効。</div>
+    </div>
+  </div>
+
+  <div class="acc">
+    <div class="acc-h" onclick="ta(this)"><span>筋痙攣 — 週間距離フラグが1位</span><span class="acc-a">▼</span></div>
+    <div class="acc-b">
+      <div class="br"><span class="bl" style="color:#fca5a5">acute_dist_WARN_flag 🚩</span><div class="bt"><div class="bf" style="width:100%;background:#ef4444"></div></div><span class="bv">0.105</span></div>
+      <div class="br"><span class="bl">event_count_change_of_orientation_ZScore</span><div class="bt"><div class="bf" style="width:84%;background:#8b5cf6"></div></div><span class="bv">0.088</span></div>
+      <div class="br"><span class="bl">event_count_exertion_ACWR(EWMA)</span><div class="bt"><div class="bf" style="width:72%;background:#8b5cf6"></div></div><span class="bv">0.076</span></div>
+      <div class="br"><span class="bl">jump_load_ACWR(EWMA)</span><div class="bt"><div class="bf" style="width:72%;background:#8b5cf6"></div></div><span class="bv">0.075</span></div>
+      <div class="br"><span class="bl">distance_total_m_ZScore</span><div class="bt"><div class="bf" style="width:65%;background:#8b5cf6"></div></div><span class="bv">0.068</span></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text2)">→ 週間走行距離フラグが1位。高負荷週の疲労蓄積が筋痙攣の主因。「いつもより方向転換が少ない日」（2位）が疲労のサインとして機能。水分・塩分補給管理と高負荷週の負荷コントロールを組み合わせる。</div>
+    </div>
+  </div>
+
+  <div class="acc">
+    <div class="acc-h" onclick="ta(this)"><span>筋膜/腱膜炎 — 高強度イベント数の週間蓄積が最重要</span><span class="acc-a">▼</span></div>
+    <div class="acc-b">
+      <div class="br"><span class="bl">event_count_exertion_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:100%;background:#8b5cf6"></div></div><span class="bv">0.121</span></div>
+      <div class="br"><span class="bl">event_count_change_of_orientation_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:90%;background:#8b5cf6"></div></div><span class="bv">0.108</span></div>
+      <div class="br"><span class="bl">accel_load_accum_Daily</span><div class="bt"><div class="bf" style="width:74%;background:#8b5cf6"></div></div><span class="bv">0.090</span></div>
+      <div class="br"><span class="bl">jump_load_Daily</span><div class="bt"><div class="bf" style="width:62%;background:#8b5cf6"></div></div><span class="bv">0.075</span></div>
+      <div class="br"><span class="bl">accel_load_accum_avg_per_minute_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:54%;background:#8b5cf6"></div></div><span class="bv">0.065</span></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text2)">→ 週間の高強度イベント数の蓄積が1位。どれか1指標を落とすだけでリスク低減が期待できる。練習後のクールダウン・ストレッチと組み合わせた管理が有効。</div>
+    </div>
+  </div>
+
+  <div class="acc">
+    <div class="acc-h" onclick="ta(this)"><span>打撲傷(表在性) — jump_load_ZScore が突出（0.199）</span><span class="acc-a">▼</span></div>
+    <div class="acc-b">
+      <div class="br"><span class="bl">jump_load_ZScore</span><div class="bt"><div class="bf" style="width:100%;background:#8b5cf6"></div></div><span class="bv">0.199</span></div>
+      <div class="br"><span class="bl">event_count_change_of_orientation_ZScore</span><div class="bt"><div class="bf" style="width:69%;background:#8b5cf6"></div></div><span class="bv">0.138</span></div>
+      <div class="br"><span class="bl">jump_load_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:51%;background:#8b5cf6"></div></div><span class="bv">0.101</span></div>
+      <div class="br"><span class="bl">event_count_exertion_Acute(7dSum)</span><div class="bt"><div class="bf" style="width:49%;background:#8b5cf6"></div></div><span class="bv">0.097</span></div>
+      <div style="margin-top:12px;font-size:12px;color:var(--text2)">→ いつもより多いジャンプの日に打撲リスクが上昇。接触系の傷害のためGPSとの関係は限定的だが、高強度・高ジャンプの日はコンタクト場面でも特に注意が必要。</div>
+    </div>
+  </div>
+</div>
+
+</main>
+
+<script>
+function sw(i){
+  document.querySelectorAll('.pane').forEach((p,j)=>p.classList.toggle('active',i===j));
+  document.querySelectorAll('nav button').forEach((b,j)=>b.classList.toggle('active',i===j));
+}
+function ta(h){h.closest('.acc').classList.toggle('open')}
+
+const CASES=[{"player": "Ryusei Sasaki", "date": "2025-05-18", "type": "腱断裂", "part": "23. アキレス腱", "acute": 24034, "jump_d": 27732, "decel_acwr": 1.101, "cod_z": 1.29, "flags": ["ルールA"]}, {"player": "Yante Maten", "date": "2025-04-13", "type": "肉ばなれ / 筋断裂", "part": "22. 下腿", "acute": 36758, "jump_d": 27073, "decel_acwr": 1.104, "cod_z": 0.98, "flags": ["ルールA", "週間距離警戒"]}, {"player": "Nyika Williams", "date": "2025-04-12", "type": "打撲傷(表在性)", "part": "9. 臀部", "acute": 28239, "jump_d": 3117, "decel_acwr": 0.987, "cod_z": -1.44, "flags": ["COD低下", "ルールC"]}, {"player": "Ryusei Sasaki", "date": "2025-03-23", "type": "肉ばなれ / 筋断裂", "part": "22. 下腿", "acute": 26798, "jump_d": 23792, "decel_acwr": 1.286, "cod_z": 1.4, "flags": ["ルールA", "ACWR急増"]}, {"player": "Hayato Wakugawa", "date": "2025-03-08", "type": "関節捻挫(靭帯損傷)", "part": "24. 足関節", "acute": 48000, "jump_d": 19873, "decel_acwr": 1.162, "cod_z": 0.81, "flags": ["ルールA", "週間距離警戒"]}, {"player": "Shinsuke Kashiwagi", "date": "2025-02-27", "type": "肉ばなれ / 筋断裂", "part": "22. 下腿", "acute": 22929, "jump_d": 5016, "decel_acwr": 1.441, "cod_z": -0.45, "flags": ["閾値未満"]}, {"player": "Ryusei Sasaki", "date": "2025-02-01", "type": "関節炎 / 滑液包炎", "part": "21. 膝", "acute": 35530, "jump_d": 1078, "decel_acwr": 0.958, "cod_z": -1.56, "flags": ["週間距離警戒", "COD低下", "ルールC"]}, {"player": "Hayato Wakugawa", "date": "2025-02-01", "type": "打撲傷(表在性)", "part": "22. 下腿", "acute": 42159, "jump_d": 5769, "decel_acwr": 1.11, "cod_z": -1.54, "flags": ["週間距離警戒", "COD低下", "ルールC"]}, {"player": "David Nwaba", "date": "2025-02-01", "type": "筋膜 / 腱膜炎", "part": "7. 腰/腰椎", "acute": 36221, "jump_d": 1569, "decel_acwr": 1.015, "cod_z": -0.98, "flags": ["週間距離警戒"]}, {"player": "Ryusei Sasaki", "date": "2025-01-29", "type": "筋膜 / 腱膜炎", "part": "22. 下腿", "acute": 35630, "jump_d": 4086, "decel_acwr": 1.035, "cod_z": -1.56, "flags": ["週間距離警戒", "COD低下", "ルールC"]}, {"player": "Hayato Wakugawa", "date": "2025-01-29", "type": "関節捻挫(靭帯損傷)", "part": "21. 膝", "acute": 41857, "jump_d": 13904, "decel_acwr": 1.214, "cod_z": -0.1, "flags": ["ルールA", "週間距離警戒"]}, {"player": "David Nwaba", "date": "2025-01-17", "type": "軟骨損傷(半月板)", "part": "21. 膝", "acute": 27411, "jump_d": 1448, "decel_acwr": 0.747, "cod_z": -1.2, "flags": ["COD低下", "ルールC"]}, {"player": "Shinsuke Kashiwagi", "date": "2025-01-10", "type": "関節炎 / 滑液包炎", "part": "21. 膝", "acute": 16760, "jump_d": 13070, "decel_acwr": 1.127, "cod_z": 1.73, "flags": ["ACWR急増"]}, {"player": "Sota Oura", "date": "2025-01-08", "type": "裂創", "part": "3. 歯・口腔", "acute": 40583, "jump_d": 521, "decel_acwr": 0.981, "cod_z": -0.65, "flags": ["週間距離警戒"]}, {"player": "Hayato Wakugawa", "date": "2024-12-14", "type": "打撲傷(表在性)", "part": "7. 腰/腰椎", "acute": 39249, "jump_d": 4670, "decel_acwr": 0.944, "cod_z": -0.92, "flags": ["週間距離警戒"]}, {"player": "Hirotaka Yoshii", "date": "2024-12-08", "type": "筋膜 / 腱膜炎", "part": "25. 足", "acute": 34106, "jump_d": 33176, "decel_acwr": 1.558, "cod_z": 0.27, "flags": ["ルールA", "週間距離警戒", "ACWR急増"]}, {"player": "Shinsuke Kashiwagi", "date": "2024-12-08", "type": "関節炎 / 滑液包炎", "part": "25. 足", "acute": 30040, "jump_d": 26998, "decel_acwr": 1.096, "cod_z": -1.01, "flags": ["ルールA", "ACWR急増", "COD低下", "ルールC"]}, {"player": "David Nwaba", "date": "2024-12-07", "type": "肉ばなれ / 筋断裂", "part": "20. 大腿", "acute": 32669, "jump_d": 2274, "decel_acwr": 0.852, "cod_z": -1.56, "flags": ["週間距離警戒", "COD低下", "ルールC"]}, {"player": "David Nwaba", "date": "2024-12-04", "type": "軟骨損傷(半月板)", "part": "21. 膝", "acute": 33053, "jump_d": 1472, "decel_acwr": 0.975, "cod_z": -1.6, "flags": ["週間距離警戒", "COD低下", "ルールC"]}, {"player": "Yante Maten", "date": "2024-12-04", "type": "関節捻挫(靭帯損傷)", "part": "10. 肩", "acute": 32438, "jump_d": 5746, "decel_acwr": 1.069, "cod_z": -1.66, "flags": ["COD低下", "ルールC"]}, {"player": "David Nwaba", "date": "2024-12-01", "type": "筋膜 / 腱膜炎", "part": "20. 大腿", "acute": 28571, "jump_d": 30263, "decel_acwr": 1.179, "cod_z": 0.62, "flags": ["ルールA"]}, {"player": "Sota Oura", "date": "2024-10-27", "type": "関節捻挫(靭帯損傷)", "part": "24. 足関節", "acute": 36367, "jump_d": 15317, "decel_acwr": 1.13, "cod_z": 0.52, "flags": ["ルールA", "週間距離警戒"]}, {"player": "Ryusei Sasaki", "date": "2024-10-19", "type": "打撲傷(表在性)", "part": "9. 臀部", "acute": 24844, "jump_d": 3726, "decel_acwr": 0.817, "cod_z": -1.4, "flags": ["COD低下", "ルールC"]}, {"player": "Yante Maten", "date": "2024-10-13", "type": "関節炎 / 滑液包炎", "part": "21. 膝", "acute": 34855, "jump_d": 31435, "decel_acwr": 1.304, "cod_z": 0.34, "flags": ["ルールA", "週間距離警戒", "ACWR急増"]}, {"player": "David Nwaba", "date": "2024-10-06", "type": "脱臼", "part": "16. 指", "acute": 31996, "jump_d": 30835, "decel_acwr": 1.039, "cod_z": 0.04, "flags": ["ルールA"]}, {"player": "Ryusei Sasaki", "date": "2024-10-05", "type": "筋痙攣", "part": "22. 下腿", "acute": 32329, "jump_d": 7609, "decel_acwr": 0.887, "cod_z": -1.7, "flags": ["ルールA", "COD低下", "ルールC"]}, {"player": "Sota Oura", "date": "2024-10-05", "type": "筋痙攣", "part": "22. 下腿", "acute": 25931, "jump_d": 1705, "decel_acwr": 0.703, "cod_z": -1.47, "flags": ["COD低下", "ルールC"]}, {"player": "Daivid Dudzinski", "date": "2024-10-05", "type": "筋打撲傷", "part": "20. 大腿", "acute": 36908, "jump_d": 5128, "decel_acwr": 0.855, "cod_z": -1.99, "flags": ["週間距離警戒", "COD低下", "ルールC"]}, {"player": "David Nwaba", "date": "2024-10-05", "type": "筋痙攣", "part": "22. 下腿", "acute": 30548, "jump_d": 2055, "decel_acwr": 0.848, "cod_z": -1.09, "flags": ["COD低下", "ルールC"]}, {"player": "Daivid Dudzinski", "date": "2024-09-22", "type": "筋痙攣", "part": "20. 大腿", "acute": 43039, "jump_d": 34584, "decel_acwr": 1.029, "cod_z": -0.09, "flags": ["ルールA", "週間距離警戒"]}, {"player": "Yante Maten", "date": "2024-09-22", "type": "筋痙攣", "part": "25. 足", "acute": 35921, "jump_d": 26622, "decel_acwr": 1.67, "cod_z": -0.12, "flags": ["ルールA", "週間距離警戒", "ACWR急増"]}, {"player": "David Nwaba", "date": "2024-09-19", "type": "軟骨損傷(半月板)", "part": "21. 膝", "acute": 41137, "jump_d": 4546, "decel_acwr": 0.988, "cod_z": -1.23, "flags": ["週間距離警戒", "COD低下", "ルールC"]}, {"player": "Daivid Dudzinski", "date": "2024-09-08", "type": "打撲傷(表在性)", "part": "21. 膝", "acute": 41558, "jump_d": 45263, "decel_acwr": 1.244, "cod_z": -0.36, "flags": ["ルールA", "週間距離警戒", "ACWR急増"]}, {"player": "Shinsuke Kashiwagi", "date": "2024-09-04", "type": "肉ばなれ / 筋断裂", "part": "22. 下腿", "acute": 29213, "jump_d": 4908, "decel_acwr": 1.089, "cod_z": 0.46, "flags": ["閾値未満"]}, {"player": "Yante Maten", "date": "2024-08-23", "type": "軟骨損傷(半月板)", "part": "21. 膝", "acute": 30778, "jump_d": 11653, "decel_acwr": 1.463, "cod_z": 0.47, "flags": ["ルールA"]}, {"player": "Yante Maten", "date": "2024-08-18", "type": "関節炎 / 滑液包炎", "part": "21. 膝", "acute": 31302, "jump_d": 16760, "decel_acwr": 2.143, "cod_z": 0.42, "flags": ["ルールA", "ACWR急増"]}, {"player": "Hayato Wakugawa", "date": "2024-08-15", "type": "関節捻挫(靭帯損傷)", "part": "24. 足関節", "acute": 11603, "jump_d": 24283, "decel_acwr": 0.626, "cod_z": 0.59, "flags": ["ルールB"]}, {"player": "Coty Clarke", "date": "2024-04-21", "type": "筋膜 / 腱膜炎", "part": "20. 大腿", "acute": 23246, "jump_d": 5776, "decel_acwr": 1.09, "cod_z": 0.11, "flags": ["閾値未満"]}, {"player": "Ryusei Sasaki", "date": "2023-12-30", "type": "疲労性骨損傷", "part": "9. 臀部", "acute": 12291, "jump_d": 1175, "decel_acwr": 0.529, "cod_z": -2.68, "flags": ["ルールB", "COD低下"]}, {"player": "Thirdy Ravena", "date": "2023-11-05", "type": "脳振盪", "part": "1. 頭部", "acute": 18444, "jump_d": 12326, "decel_acwr": 1.093, "cod_z": 0.5, "flags": ["閾値未満"]}, {"player": "Atsuya Ota", "date": "2022-12-17", "type": "靭帯断裂", "part": "24. 足関節", "acute": 24009, "jump_d": 10125, "decel_acwr": 0.959, "cod_z": -0.27, "flags": ["ルールA"]}];
+
+const FC={'ルールA':'tr','ルールB':'ta','ルールC':'ta','週間距離警戒':'tr','ACWR急増':'ta','COD低下':'ta','閾値未満':'tgr'};
+function rC(data){
+  document.getElementById('cTbody').innerHTML=data.map(c=>{
+    const ac=c.acute>32544?'color:#fca5a5;font-weight:700':c.acute>22922?'color:#fcd34d':'';
+    const jc=c.jump_d>25000?'color:#fca5a5;font-weight:700':'';
+    const dc=c.decel_acwr>1.3?'color:#fca5a5;font-weight:700':c.decel_acwr<0.8?'color:#fcd34d':'';
+    const cc=c.cod_z<-1.0?'color:#fca5a5;font-weight:700':c.cod_z<-0.5?'color:#fcd34d':'';
+    const fl=c.flags.map(f=>`<span class="tag ${FC[f]||'tgr'}">${f}</span>`).join('');
+    return`<tr><td style="font-weight:500;white-space:nowrap">${c.player}</td><td style="font-family:var(--mono);font-size:11px;white-space:nowrap">${c.date}</td><td style="font-size:12px">${c.type}</td><td style="font-size:11px;color:var(--text2)">${c.part}</td><td style="font-family:var(--mono);font-size:11px;${ac}">${c.acute.toLocaleString()}</td><td style="font-family:var(--mono);font-size:11px;${jc}">${c.jump_d.toLocaleString()}</td><td style="font-family:var(--mono);font-size:11px;${dc}">${c.decel_acwr}</td><td style="font-family:var(--mono);font-size:11px;${cc}">${c.cod_z}</td><td>${fl}</td></tr>`;
+  }).join('');
+}
+function fc(f,e){
+  document.querySelectorAll('.fbtn').forEach(b=>b.classList.remove('active'));
+  e.target.classList.add('active');
+  rC(f==='all'?CASES:CASES.filter(c=>c.flags.includes(f)));
+}
+rC(CASES);
+
+// Charts
+function initCharts(){
+  if(typeof Chart==='undefined')return;
+  const gc='rgba(255,255,255,0.05)',tc='#8a96aa';
+  const opts=xl=>({
+    responsive:true,maintainAspectRatio:false,
+    plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.parsed.y.toFixed(3)+'%'}}},
+    scales:{
+      x:{grid:{color:gc},ticks:{color:tc,font:{size:8},maxRotation:40},title:{display:true,text:xl,color:tc,font:{size:8}}},
+      y:{grid:{color:gc},ticks:{color:tc,font:{size:8},callback:v=>v.toFixed(2)+'%'},title:{display:true,text:'受傷率(%)',color:tc,font:{size:8}},beginAtZero:true}
+    }
+  });
+  const lc=(el,lb,dt,col,xl)=>{
+    const c=document.getElementById(el);if(!c)return;
+    new Chart(c,{type:'line',data:{labels:lb,datasets:[{data:dt,borderColor:col,backgroundColor:col.replace('1)','0.08)'),borderWidth:2,pointRadius:3,pointBackgroundColor:col,fill:true,tension:0.4}]},options:opts(xl)});
+  };
+  // Day 0 Risk Curves より
+  lc('cAcute',['0-5k','5-10k','10-15k','15-20k','20-25k','25-30k','30-35k','35-40k','40-45k','45k+'],
+    [4.23,1.60,0.89,0.00,0.47,0.71,1.79,1.45,2.34,0.34],'rgba(139,92,246,1)','distance_total_m_Acute(7dSum) — Day 0 [5000m等間隔]');
+  lc('cJump',['0-5k','5-10k','10-15k','15-20k','20-25k','25-30k','30-35k','35-40k','40k+'],
+    [1.68,0.83,0.81,0.45,1.08,2.19,0.65,1.10,2.82],'rgba(239,68,68,1)','jump_load_Daily — Day 0 [5000等間隔]');
+  lc('cAcwr',['<0.25','0.25-0.5','0.5-0.75','0.75-1.0','1.0-1.25','1.25-1.5','1.5-1.75','1.75-2.0','2.0+'],
+    [0.00,0.00,2.99,0.80,0.87,0.65,0.84,0.00,0.57],'rgba(245,158,11,1)','accel_load_accum_ACWR(EWMA) — Day 0 [0.25等間隔]');
+  // Day -1 Risk Curves より
+  lc('cAccZ',['Q1','Q2','Q3','Q4','Q5','Q6','Q7','Q8','Q9','Q10'],
+    [2.51,1.35,0.19,0.19,0.19,0.58,0.58,1.16,0.77,0.77],'rgba(16,185,129,1)','accel_load_accum_ZScore — Day -1 [10分位]');
+}
+const sc=document.createElement('script');
+sc.src='https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js';
+sc.onload=initCharts;
+document.head.appendChild(sc);
+</script>
+</body>
+</html>
